@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink">
+  
+    <rect style="fill:#F67C5F" width="100" height="100" rx="5" ry="5" />
+    <text style="font-size:55px;color: #F9F6F2;" id="tileLabel" text-anchor="middle" x="50" y="70">32</text>
+</svg>
