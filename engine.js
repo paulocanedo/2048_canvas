@@ -23,21 +23,21 @@ function GameBoard() {
 }
 
 GameBoard.prototype.isSlotEmpty = function(row, column) {
-	var result = this.matrix[this.toAbsolutePosition(row, column)] === undefined;
+	var result = this.matrix[this.toAbsolutePosition(row, column)].tileValue === 0;
 	return result;
 };
 
 GameBoard.prototype.isSlotEquals = function(row1, column1, row2, column2) {
 	var tile1 = this.matrix[this.toAbsolutePosition(row1, column1)];
 	var tile2 = this.matrix[this.toAbsolutePosition(row2, column2)];
-	if (tile1 === undefined && tile2 === undefined) return true;
-	return tile1 !== undefined && tile2 !== undefined && tile1.tileValue === tile2.tileValue;
+
+	return tile1.tileValue !== 0 && tile2.tileValue !== 0 && tile1.tileValue === tile2.tileValue;
 };
 
 GameBoard.prototype.isBoardFull = function() {
 	var flag = true;
 	this.matrix.forEach(function(elem) {
-		if(elem === undefined) flag = false;
+		if(elem.tileValue === 0) flag = false;
 	});
 
 	return flag;
@@ -47,15 +47,14 @@ GameBoard.prototype.randomSlotEmpty = function(lastTried) {
 	if(this.isBoardFull()) return undefined;
 
 	var position = lastTried || Math.floor((Math.random() * 4 * 4));
-	if(this.matrix[position] !== undefined) {
+	if(this.matrix[position].tileValue !== 0) {
 		return this.randomSlotEmpty(lastTried + 1);
 	}
 
 	return position;
 };
 
-GameBoard.prototype.setTile = function(position, tile) {
-	this.matrix[position] = tile;
+GameBoard.prototype.setTile = function(position, tile, animationFinishEvt) {
 	if(tile === undefined) return;
 
 	var row = Math.floor(position / 4);
@@ -64,56 +63,57 @@ GameBoard.prototype.setTile = function(position, tile) {
 	var y = row * tile.width + (row * 10);
 	var x = column * tile.height + (column * 10);
 
-	tile.moveAnimatedToX(x);
-	tile.y = y;
-	// tile.y = y;
+	if(animationFinishEvt !== false) {
+		tile.moveAnimatedToX(x, animationFinishEvt);
+		tile.y = y;
+	} else {
+		tile.x = x;
+		tile.y = y;
+	}
+	this.matrix[position] = tile;
 };
 
 GameBoard.prototype.init = function() {
-	this.matrix = [
-		undefined, undefined, undefined, undefined,
-		undefined, undefined, undefined, undefined,
-		undefined, undefined, undefined, undefined,
-		undefined, undefined, undefined, undefined
-	];
+	this.matrix = [];
+	for (var i = 0; i < 16; i++) {
+		this.setTile(i, new TileSprite(0), false);
+	}
 
-	// this.insertNewTile();
-	// this.insertNewTile();
 	var position = 0;
 	// var position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(2));
+	this.setTile(position, new TileSprite(2), false);
 
 	position = 1;
 	// var position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(2));
+	this.setTile(position, new TileSprite(2), false);
 
-	position = 3;
+	// position = 3;
 	// position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(4));
+	// this.setTile(position, new TileSprite(4), false);
 
 	position = 2;
 	// position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(2));
+	this.setTile(position, new TileSprite(2), false);
 
 
 		position = 7;
 	// position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(8));
+	this.setTile(position, new TileSprite(8), false);
 
 		position = 9;
 	// position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(16));
+	this.setTile(position, new TileSprite(16), false);
 
 		position = 11;
 	// position = this.randomSlotEmpty();
-	this.setTile(position, new TileSprite(16));
+	this.setTile(position, new TileSprite(16), false);
 };
 
 GameBoard.prototype.insertNewTile = function() {
 	var position = this.randomSlotEmpty();
 
 	// this.setTile(position, new TileSprite(2));
-	this.setTile(position, new TileSprite(Math.random() < 0.9 ? 2 : 4));
+	this.setTile(position, new TileSprite(Math.random() < 0.9 ? 2 : 4), false);
 };
 
 GameBoard.prototype.start = function() {
@@ -148,44 +148,83 @@ GameBoard.prototype.start = function() {
 	window.addEventListener('keydown', keydownEvent, false);
 };
 
-GameBoard.prototype.moveTilesLeft = function() {
-	for (var i=0; i<4; i++) {
-		for (var j=0; j<4; j++) {
-			var position = j * 4 + i;
-			var tile = this.matrix[position];
-			if(tile === undefined) continue;
+GameBoard.prototype.mergeHorizontal = function(direction, row1, column1, column2) {
+	column2 = column2 === undefined ? (column1 + direction) : column2;
+	if(column1 < 0 || column2 < 0 || column1 >= 4 || column2 >= 4) return;
+	
+	var currentPosition = this.toAbsolutePosition(row1, column1);
+	var currentTile = this.matrix[currentPosition];
+	var neighbourPosition = this.toAbsolutePosition(row1, column2);
+	var neighbourTile = this.matrix[neighbourPosition];
 
-			var column = i;
-			for(var k=column-1; k>=0; k--) {
-				nTile = this.matrix[this.toAbsolutePosition(j, k)];
-				if(nTile === undefined) continue;
+	if(currentTile.changed) return;
 
-				if(this.isSlotEquals(j, k, j, column) && !nTile.merged) {
-					nTile.merged = true;
-					nTile.doubleValue();
-					this.matrix[position] = tile = undefined;
-				}
-			}
-		
-			this.matrix[position] = undefined;
-			while(column>0 && this.isSlotEmpty(j, column-1)) {
-				column--;
-				changed = true;
-			}
-			this.setTile(j * 4 + column, tile);
+	if (neighbourTile.tileValue === 0) {
+		if((column2 + direction >=0) && (column2 + direction < 4)) {
+			this.mergeHorizontal(direction, row1, column1, column2 + direction);
 		}
+	} else if (currentTile.tileValue === neighbourTile.tileValue) {
+		currentTile.changed = true;
+		this.setTile(neighbourPosition, currentTile.doubleValue());
+		this.setTile(currentPosition, new TileSprite(0), false);
 	}
-
-	this.matrix.forEach(function(elem) {
-		if(elem !== undefined) elem.merged = undefined;
-	});
 };
 
-GameBoard.prototype.moveTilesUp = function() {
+GameBoard.prototype.moveHorizontal = function(direction, row1, column1, column2) {
+	column2 = column2 === undefined ? (column1 + direction) : column2;
+	if(column1 < 0 || column2 < 0 || column1 >= 4 || column2 >= 4) return;
+	
+	var currentPosition = this.toAbsolutePosition(row1, column1);
+	var currentTile = this.matrix[currentPosition];
+	var neighbourPosition = this.toAbsolutePosition(row1, column2);
+	var neighbourTile = this.matrix[neighbourPosition];
 
+	if(neighbourTile.tileValue === 0) {
+		this.setTile(neighbourPosition, currentTile);
+		this.setTile(currentPosition, new TileSprite(0), false);
+
+		if((column2 + direction >=0) && (column2 + direction < 4)) {
+			this.moveHorizontal(direction, row1, column2, column2 + direction);
+		}
+	}
+};
+
+GameBoard.prototype.moveTilesLeft = function() {
+	for(var column=0; column<4; column++) {
+		for(var row=0; row<4; row++) {
+			var currentTile = this.matrix[this.toAbsolutePosition(row, column)];
+			if(currentTile.tileValue === 0) continue;
+
+			this.mergeHorizontal(-1, row, column);
+
+			currentTile = this.matrix[this.toAbsolutePosition(row, column)];
+			if(currentTile.tileValue === 0) continue;
+			this.moveHorizontal(-1, row, column);
+
+			currentTile.changed = false;
+		}
+	}
 };
 
 GameBoard.prototype.moveTilesRight = function() {
+	for(var column=4-1; column>=0; column--) {
+		for(var row=0; row<4; row++) {
+			var currentTile = this.matrix[this.toAbsolutePosition(row, column)];
+			if(currentTile.tileValue === 0) continue;
+
+			this.mergeHorizontal(1, row, column);
+
+			var currentTile = this.matrix[this.toAbsolutePosition(row, column)];
+			if(currentTile.tileValue === 0) continue;
+			this.moveHorizontal(1, row, column);
+
+			currentTile.changed = false;
+		}
+	}
+};
+
+
+GameBoard.prototype.moveTilesUp = function() {
 
 };
 
@@ -194,6 +233,7 @@ GameBoard.prototype.moveTilesDown = function() {
 };
 
 GameBoard.prototype.toAbsolutePosition = function(row, column) {
+	if(row < 0 || column < 0 || row > 4 - 1 || column > 4 - 1) return undefined;
 	return row * 4 + column;
 };
 
@@ -208,9 +248,7 @@ GameBoard.prototype.paint = function(context) {
 	context.clearRect(0, 0, context.canvas.width, context.canvas.height);
 
 	this.matrix.forEach(function(elem) {
-		if(elem !== undefined) {
-			elem.paint(context);
-		}
+		elem.paint(context);
 	});
 
 	var thisObj = this;
@@ -242,6 +280,11 @@ Sprite.prototype.paint = function(context) {
 			if((this.sliceX > 0 && this.x >= this.newX) || (this.sliceX < 0 && this.x <= this.newX)) {
 				this.x = this.newX;
 				this.sliceX = undefined;
+
+				if(this.animationFinishEvt !== undefined) {
+					this.animationFinishEvt();
+					this.animationFinishEvt = undefined;
+				}
 			}
 		}
 		context.drawImage(this.image, this.x, this.y);
@@ -249,10 +292,10 @@ Sprite.prototype.paint = function(context) {
 	this.ltp = new Date().getTime();
 };
 
-Sprite.prototype.moveAnimatedToX = function(newX) {
+Sprite.prototype.moveAnimatedToX = function(newX, animationFinishEvt) {
 	this.newX = newX;
 	this.sliceX = (newX - this.x) / 30;
-	console.log(this.sliceX);
+	this.animationFinishEvt = animationFinishEvt;
 };
 
 Sprite.prototype.moveAnimatedToY = function(newY) {
@@ -261,7 +304,7 @@ Sprite.prototype.moveAnimatedToY = function(newY) {
 
 //************* TileSprite **************************************
 function TileSprite(tileValue) {
-	var image = ImageFactory.build("//localhost/~paulocanedo/2048_fake/img/" + tileValue + ".png");
+	var image = ImageFactory.build("img/" + tileValue + ".png");
 
 	this.base = Sprite;
 	this.base(0, 0, 100, 100, image);
@@ -273,7 +316,9 @@ TileSprite.prototype = new Sprite;
 
 TileSprite.prototype.doubleValue = function() {
 	this.tileValue *= 2;
-	this.image = ImageFactory.build("//localhost/~paulocanedo/2048_fake/img/" + this.tileValue + ".png");
+	this.image = ImageFactory.build("img/" + this.tileValue + ".png");
+
+	return this;
 };
 //************* Initialize **************************************
 GameBoardSingleton.instance.start();
