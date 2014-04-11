@@ -1,3 +1,15 @@
+//************* Constants ***************************************
+GameConstants = (function() {
+	return {
+		DIRECTION_LEFT:   37,
+		DIRECTION_UP:     38,
+		DIRECTION_RIGHT:  39,
+		DIRECTION_DOWN:   40,
+		TILE_PADDING:     10,
+		TILE_SIZE:       100
+	};
+})();
+
 //************* ImageFactory ************************************
 ImageFactory = (function() {
 	return {
@@ -20,6 +32,7 @@ ImageFactory = (function() {
 function GameBoard() {
 	this.matrix = undefined;
 	this.running = true;
+	this.nrows = 4;
 }
 
 GameBoard.prototype.isSlotEmpty = function(row, column) {
@@ -46,7 +59,7 @@ GameBoard.prototype.isBoardFull = function() {
 GameBoard.prototype.randomSlotEmpty = function(lastTried) {
 	if(this.isBoardFull()) return undefined;
 
-	var position = lastTried || Math.floor((Math.random() * 4 * 4));
+	var position = lastTried || Math.floor((Math.random() * this.nrows * this.nrows));
 	if(this.matrix[position].tileValue !== 0) {
 		return this.randomSlotEmpty(lastTried + 1);
 	}
@@ -57,11 +70,11 @@ GameBoard.prototype.randomSlotEmpty = function(lastTried) {
 GameBoard.prototype.setTile = function(position, tile, animationFinishEvt) {
 	if(tile === undefined) return;
 
-	var row = Math.floor(position / 4);
-	var column = position % 4;
+	var row = Math.floor(position / this.nrows);
+	var column = position % this.nrows;
 
-	var y = row * tile.width + (row * 10);
-	var x = column * tile.height + (column * 10);
+	var y = row * tile.width + (row * GameConstants.TILE_PADDING);
+	var x = column * tile.height + (column * GameConstants.TILE_PADDING);
 
 	if(animationFinishEvt !== false) {
 		tile.moveAnimatedToX(x, animationFinishEvt);
@@ -75,7 +88,7 @@ GameBoard.prototype.setTile = function(position, tile, animationFinishEvt) {
 
 GameBoard.prototype.init = function() {
 	this.matrix = [];
-	for (var i = 0; i < 16; i++) {
+	for (var i = 0; i < (this.nrows * this.nrows); i++) {
 		this.setTile(i, new TileSprite(0), false);
 	}
 
@@ -89,7 +102,7 @@ GameBoard.prototype.init = function() {
 
 	// position = 3;
 	// position = this.randomSlotEmpty();
-	// this.setTile(position, new TileSprite(4), false);
+	// this.setTile(position, new TileSprite(this.nrows), false);
 
 	position = 2;
 	// position = this.randomSlotEmpty();
@@ -113,7 +126,7 @@ GameBoard.prototype.insertNewTile = function() {
 	var position = this.randomSlotEmpty();
 
 	// this.setTile(position, new TileSprite(2));
-	this.setTile(position, new TileSprite(Math.random() < 0.9 ? 2 : 4), false);
+	this.setTile(position, new TileSprite(Math.random() < 0.9 ? 2 : this.nrows), false);
 };
 
 GameBoard.prototype.start = function() {
@@ -125,107 +138,115 @@ GameBoard.prototype.start = function() {
 
 	var thisObj = this;
 	var keydownEvent = function(evt) {
-		switch(evt.keyCode) {
-			case(37): {
-				thisObj.moveTilesLeft();
-				break;
-			} case(38): {
+		if (evt.keyCode === GameConstants.DIRECTION_LEFT || evt.keyCode === GameConstants.DIRECTION_RIGHT) {
+			thisObj.moveTiles(evt.keyCode);
+		} else {
+			if (evt.keyCode === GameConstants.DIRECTION_UP) {
 				thisObj.moveTilesUp();
-				break;
-			} case(39): {
-				thisObj.moveTilesRight();
-				break;
-			} case(40): {
+			} else if (evt.keyCode === GameConstants.DIRECTION_UP) {
 				thisObj.moveTilesDown();
-				break;
 			}
 		}
 
-		if(evt.keyCode >=37 && evt.keyCode <= 40) {
-			evt.preventDefault();
-		}
+		if(evt.keyCode >= GameConstants.DIRECTION_LEFT && evt.keyCode <= GameConstants.DIRECTION_DOWN) { evt.preventDefault(); }
 	};
 	window.addEventListener('keydown', keydownEvent, false);
 };
 
+GameBoard.prototype.mergeAndMoveHorizontal = function(direction, row, column) {
+	var tile = this.mergeHorizontal(direction, row, column);
+	tile = this.moveHorizontal(direction, row, column);
+
+	return tile;
+};
+
 GameBoard.prototype.mergeHorizontal = function(direction, row1, column1, column2) {
-	column2 = column2 === undefined ? (column1 + direction) : column2;
-	if(column1 < 0 || column2 < 0 || column1 >= 4 || column2 >= 4) return;
-	
 	var currentPosition = this.toAbsolutePosition(row1, column1);
 	var currentTile = this.matrix[currentPosition];
+	if(currentTile.tileValue === 0) return currentTile;
+
+	column2 = column2 === undefined ? (column1 + direction) : column2;
+	if(column1 < 0 || column2 < 0 || column1 >= this.nrows || column2 >= this.nrows) return currentTile;
+	
 	var neighbourPosition = this.toAbsolutePosition(row1, column2);
 	var neighbourTile = this.matrix[neighbourPosition];
 
-	if(currentTile.changed) return;
+	if(currentTile.changed) return currentTile;
 
-	if (neighbourTile.tileValue === 0) {
-		if((column2 + direction >=0) && (column2 + direction < 4)) {
-			this.mergeHorizontal(direction, row1, column1, column2 + direction);
+	if(neighbourTile.tileValue === 0) {
+		if((column2 + direction >=0) && (column2 + direction < this.nrows)) {
+			return this.mergeHorizontal(direction, row1, column1, column2 + direction);
 		}
 	} else if (currentTile.tileValue === neighbourTile.tileValue) {
 		currentTile.changed = true;
 		this.setTile(neighbourPosition, currentTile.doubleValue());
 		this.setTile(currentPosition, new TileSprite(0), false);
 	}
+	return currentTile;
 };
 
 GameBoard.prototype.moveHorizontal = function(direction, row1, column1, column2) {
-	column2 = column2 === undefined ? (column1 + direction) : column2;
-	if(column1 < 0 || column2 < 0 || column1 >= 4 || column2 >= 4) return;
-	
 	var currentPosition = this.toAbsolutePosition(row1, column1);
 	var currentTile = this.matrix[currentPosition];
+	if(currentTile.tileValue === 0) return currentTile;
+
+	column2 = column2 === undefined ? (column1 + direction) : column2;
+	if(column1 < 0 || column2 < 0 || column1 >= this.nrows || column2 >= this.nrows) return currentTile;
+	
 	var neighbourPosition = this.toAbsolutePosition(row1, column2);
 	var neighbourTile = this.matrix[neighbourPosition];
 
 	if(neighbourTile.tileValue === 0) {
+		currentTile.changed = true;
 		this.setTile(neighbourPosition, currentTile);
 		this.setTile(currentPosition, new TileSprite(0), false);
 
-		if((column2 + direction >=0) && (column2 + direction < 4)) {
-			this.moveHorizontal(direction, row1, column2, column2 + direction);
+		if((column2 + direction >=0) && (column2 + direction < this.nrows)) {
+			return this.moveHorizontal(direction, row1, column2, column2 + direction);
+		}
+	}
+	return currentTile;
+};
+
+GameBoard.prototype.moveTiles = function(dir) {
+	var changed = false;
+	var start = (dir == GameConstants.DIRECTION_LEFT ? 0 : this.nrows-1), end = (dir == GameConstants.DIRECTION_LEFT ? this.nrows : 0);
+
+	var condition = (dir == GameConstants.DIRECTION_LEFT) ? (function(column, end) { return column.value < end; }) : (function(column, end) { return column.value >= end; });
+	var increment = (dir == GameConstants.DIRECTION_LEFT) ? (function(column) { return column.value += 1; }) : (function(column) { return column.value -= 1; });
+
+	var oColumn = {value: undefined};
+
+	for(var row=0; row<this.nrows; row++) {
+		for(oColumn.value=start; condition(oColumn, end); increment(oColumn)) {
+			var column = oColumn.value;
+			var tile = this.mergeAndMoveHorizontal(dir == GameConstants.DIRECTION_LEFT ? -1 : 1, row, column);
+			if(tile.changed === true) changed = true;
+
+			tile.changed = false;
+		}
+	}
+
+	if(changed === true) {
+		this.insertNewTile();
+	} else {
+		if(this.isBoardFull()) {
+			alert("Game Over");
 		}
 	}
 };
-
-GameBoard.prototype.moveTilesLeft = function() {
-	for(var column=0; column<4; column++) {
-		for(var row=0; row<4; row++) {
-			var currentTile = this.matrix[this.toAbsolutePosition(row, column)];
-			if(currentTile.tileValue === 0) continue;
-
-			this.mergeHorizontal(-1, row, column);
-
-			currentTile = this.matrix[this.toAbsolutePosition(row, column)];
-			if(currentTile.tileValue === 0) continue;
-			this.moveHorizontal(-1, row, column);
-
-			currentTile.changed = false;
-		}
-	}
-};
-
-GameBoard.prototype.moveTilesRight = function() {
-	for(var column=4-1; column>=0; column--) {
-		for(var row=0; row<4; row++) {
-			var currentTile = this.matrix[this.toAbsolutePosition(row, column)];
-			if(currentTile.tileValue === 0) continue;
-
-			this.mergeHorizontal(1, row, column);
-
-			var currentTile = this.matrix[this.toAbsolutePosition(row, column)];
-			if(currentTile.tileValue === 0) continue;
-			this.moveHorizontal(1, row, column);
-
-			currentTile.changed = false;
-		}
-	}
-};
-
 
 GameBoard.prototype.moveTilesUp = function() {
-
+	var changed = false;
+	for(var column=0; column<this.nrows; column++) {
+		for(var row=0; row<this.nrows; row++) {
+			var tile = this.mergeAndMoveHorizontal(-1, row, column);
+			if(tile.changed === true) {
+				changed = true;
+			}
+			tile.changed = false;
+		}
+	}
 };
 
 GameBoard.prototype.moveTilesDown = function() {
@@ -233,14 +254,14 @@ GameBoard.prototype.moveTilesDown = function() {
 };
 
 GameBoard.prototype.toAbsolutePosition = function(row, column) {
-	if(row < 0 || column < 0 || row > 4 - 1 || column > 4 - 1) return undefined;
-	return row * 4 + column;
+	if(row < 0 || column < 0 || row > this.nrows - 1 || column > this.nrows - 1) return undefined;
+	return row * this.nrows + column;
 };
 
 GameBoard.prototype.toRowColumn = function(position) {
 	return {
-		row: Math.floor(position / 4),
-		column: position % 4
+		row: Math.floor(position / this.nrows),
+		column: position % this.nrows
 	};
 };
 
@@ -307,7 +328,7 @@ function TileSprite(tileValue) {
 	var image = ImageFactory.build("img/" + tileValue + ".png");
 
 	this.base = Sprite;
-	this.base(0, 0, 100, 100, image);
+	this.base(0, 0, GameConstants.TILE_SIZE, GameConstants.TILE_SIZE, image);
 
 	this.tileValue = tileValue;
 	this.ltp = 0;
